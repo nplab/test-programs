@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2017 Michael Tuexen
+ * Copyright (c) 2018 Felix Weinrank
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,18 +25,65 @@
  * SUCH DAMAGE.
  */
 
+#if defined(_WIN32)
+
+#include <winsock2.h>
+#include <MSWSock.h>
+#include <WS2tcpip.h>
+#include <Windows.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <BaseTsd.h>
+#include <io.h>
+
+#pragma warning(disable:4996)
+#pragma comment(lib, "Ws2_32.lib")
+
+typedef SSIZE_T ssize_t;
+
+#else // defined(_WIN32)
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+
 #if defined(__FreeBSD__)
 #include <netinet/tcp.h>
-#endif
+#endif // defined(__FreeBSD__)
+
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#endif // defined(_WIN32)
+
+#if defined(_WIN32)
+
+static LPFN_CONNECTEX ConnectEx = NULL;
+
+static BOOL load_mswsock(void) {
+	/* Dummy socket needed for WSAIoctl */
+	/* WTF?! */
+	SOCKET sock;
+	GUID guid = WSAID_CONNECTEX;
+	DWORD dwBytes;
+
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+
+	if (sock == INVALID_SOCKET) {
+		return(FALSE);
+	}
+
+	if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &ConnectEx, sizeof(ConnectEx), &dwBytes, NULL, NULL) != 0) {
+		return(FALSE);
+	}
+		
+	closesocket(sock);
+	return(TRUE);
+}
+#endif // defined(_WIN32
 
 int
 main(int argc, char *argv[])
@@ -43,6 +91,7 @@ main(int argc, char *argv[])
 	char buf[1024];
 	char *req = "GET /cgi-bin/he HTTP/1.0\r\nUser-agent: tcp_fastopen\r\nConnection: close\r\n\r\n";
 	struct sockaddr_in addr;
+	ssize_t n;
 #if defined(__APPLE__)
 	sa_endpoints_t endpoints;
 	struct iovec iov;
@@ -51,12 +100,39 @@ main(int argc, char *argv[])
 #if defined(__FreeBSD__)
 	const int on = 1;
 #endif
-	ssize_t n;
+#if defined(_WIN32)
+	SOCKET fd;
+	WSADATA wsaData;
+	OVERLAPPED ol;
+	DWORD bytesSent;
+	BOOL ok;
+#else // defined(_WIN32)
 	int fd;
+#endif // defined(_WIN32)
+
+	if (argc != 3) {
+		printf("usage: tcp-fastopen URL PORT\n");
+		exit(EXIT_FAILURE);
+	}
+
+#if defined(_WIN32)
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		printf("WSAStartup failed\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!load_mswsock()) {
+		printf("Error loading mswsock functions: %d\n", WSAGetLastError());
+		exit(EXIT_FAILURE);
+	}
+#endif
+
 
 	if ((fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
+		exit(EXIT_FAILURE);
 	}
+
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -87,20 +163,72 @@ main(int argc, char *argv[])
 	if (sendto(fd, req, strlen(req), MSG_FASTOPEN, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0) {
 		perror("sendto");
 	}
+#elif defined(_WIN32)
+	char optVal = TRUE;
+	if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, &optVal, sizeof(optVal)) != 0) {
+		printf("setsockopt failed: %d\n", WSAGetLastError());
+		exit(EXIT_FAILURE);
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = 0;
+	if (bind(fd, (SOCKADDR*)&addr, sizeof(addr)) != 0) {
+		printf("bind failed: %d\n", WSAGetLastError());
+		return(EXIT_FAILURE);
+	}
+
+	inet_pton(AF_INET, argv[1], &addr.sin_addr.s_addr);
+	addr.sin_port = htons(atoi(argv[2]));
+
+	memset(&ol, 0, sizeof(ol));
+	ok = ConnectEx(fd, (SOCKADDR*)&addr, sizeof(addr), req, strlen(req), &bytesSent, &ol);
+
+	if (ok) {
+		printf("ConnectEx ok - 1\n");
+	} else if (WSAGetLastError() == ERROR_IO_PENDING) {
+		ok = GetOverlappedResult((HANDLE)fd, &ol, &bytesSent, TRUE);
+		printf("ConnectEx pending\n");
+
+		if (!ok) {
+			printf("ConnectEx fail at 1: %d\n", WSAGetLastError());
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		printf("ConnectEx fail at 2: %d\n", WSAGetLastError());
+		exit(EXIT_FAILURE);
+	}
+
 #else
 #error "Unsupported platform"
 #endif
+
 	do {
 		if ((n = recv(fd, buf, sizeof(buf), 0)) < 0) {
 			perror("recv");
+			exit(EXIT_FAILURE);
 		} else {
 			if (n > 0) {
+#if defined(_WIN32)
+				_write(1, buf, n);
+#else //defined(_WIN32)
 				write(1, buf, n);
+#endif
 			}
 		}
 	} while (n > 0);
+
+#if defined(_WIN32)
+	if (closesocket(fd) < 0) {
+		printf("closesocket() failed\n");
+		exit(EXIT_FAILURE);
+	}
+	WSACleanup();
+#else 
 	if (close(fd) < 0) {
 		perror("close");
 	}
-	return (0);
+#endif
+	return (EXIT_SUCCESS);
 }
