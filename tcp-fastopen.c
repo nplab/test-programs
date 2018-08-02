@@ -79,7 +79,7 @@ static BOOL load_mswsock(void) {
 	if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &ConnectEx, sizeof(ConnectEx), &dwBytes, NULL, NULL) != 0) {
 		return(FALSE);
 	}
-		
+
 	closesocket(sock);
 	return(TRUE);
 }
@@ -225,7 +225,7 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 	WSACleanup();
-#else 
+#else
 	if (close(fd) < 0) {
 		perror("close");
 	}
