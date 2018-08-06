@@ -1,6 +1,6 @@
 include(CheckCCompilerFlag)
 
-project(usrsctplib)
+project(Test-Programs)
 cmake_minimum_required(VERSION 3.0)
 
 # Debug build type as default

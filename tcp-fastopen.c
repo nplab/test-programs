@@ -37,9 +37,7 @@
 #include <BaseTsd.h>
 #include <io.h>
 
-#pragma warning(disable:4996)
 #pragma comment(lib, "Ws2_32.lib")
-
 typedef SSIZE_T ssize_t;
 
 #else // defined(_WIN32)
@@ -106,6 +104,7 @@ main(int argc, char *argv[])
 	OVERLAPPED ol;
 	DWORD bytesSent;
 	BOOL ok;
+	struct sockaddr_in bind_addr;
 #else // defined(_WIN32)
 	int fd;
 #endif // defined(_WIN32)
@@ -127,7 +126,6 @@ main(int argc, char *argv[])
 	}
 #endif
 
-
 	if ((fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
 		exit(EXIT_FAILURE);
@@ -138,8 +136,11 @@ main(int argc, char *argv[])
 #if defined(__APPLE__) || defined(__FreeBSD__)
 	addr.sin_len = sizeof(struct sockaddr_in);
 #endif
-	addr.sin_addr.s_addr = inet_addr(argv[1]);
 	addr.sin_port = htons(atoi(argv[2]));
+	if (inet_pton(AF_INET, argv[1], &addr.sin_addr.s_addr) != 1) {
+		printf("inet_pton failed - please enter valid IPv4 address!\n");
+		return(EXIT_FAILURE);
+	}
 #if defined(__APPLE__)
 	endpoints.sae_srcif = 0;
 	endpoints.sae_srcaddr = NULL;
@@ -170,18 +171,17 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = 0;
-	if (bind(fd, (SOCKADDR*)&addr, sizeof(addr)) != 0) {
+	memset(&bind_addr, 0, sizeof(bind_addr));
+	bind_addr.sin_family = AF_INET;
+	bind_addr.sin_addr.s_addr = INADDR_ANY;
+	bind_addr.sin_port = 0;
+	//inet_pton(AF_INET, "10.0.1.158", &addr.sin_addr.s_addr);
+	//addr.sin_port = htons(1988);
+	if (bind(fd, (SOCKADDR*)&bind_addr, sizeof(bind_addr)) != 0) {
 		printf("bind failed: %d\n", WSAGetLastError());
 		return(EXIT_FAILURE);
 	}
-
-	inet_pton(AF_INET, argv[1], &addr.sin_addr.s_addr);
-	addr.sin_port = htons(atoi(argv[2]));
-
+	
 	memset(&ol, 0, sizeof(ol));
 	ok = ConnectEx(fd, (SOCKADDR*)&addr, sizeof(addr), req, strlen(req), &bytesSent, &ol);
 
