@@ -166,7 +166,7 @@ main(int argc, char *argv[])
 	endpoints.sae_srcaddr = NULL;
 	endpoints.sae_srcaddrlen = 0;
 	endpoints.sae_dstaddr = (struct sockaddr *)&addr;
-	endpoints.sae_dstaddrlen = sizeof(struct sockaddr_in);
+	endpoints.sae_dstaddrlen = addr_len;
 	iov.iov_base = req;
 	iov.iov_len = strlen(req);
 	len = strlen(req);
