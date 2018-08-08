@@ -58,7 +58,6 @@ typedef SSIZE_T ssize_t;
 #endif // defined(_WIN32)
 
 #if defined(_WIN32)
-
 static LPFN_CONNECTEX ConnectEx = NULL;
 
 static BOOL load_mswsock(void) {
@@ -88,7 +87,11 @@ main(int argc, char *argv[])
 {
 	char buf[1024];
 	char *req = "GET /cgi-bin/he HTTP/1.0\r\nUser-agent: tcp_fastopen\r\nConnection: close\r\n\r\n";
-	struct sockaddr_in addr;
+	struct sockaddr_storage addr;
+	struct sockaddr_in *addr4;
+	struct sockaddr_in6 *addr6;
+	int socket_family;
+
 	ssize_t n;
 #if defined(__APPLE__)
 	sa_endpoints_t endpoints;
@@ -104,13 +107,13 @@ main(int argc, char *argv[])
 	OVERLAPPED ol;
 	DWORD bytesSent;
 	BOOL ok;
-	struct sockaddr_in bind_addr;
+	struct sockaddr_storage bind_addr;
 #else // defined(_WIN32)
 	int fd;
 #endif // defined(_WIN32)
 
 	if (argc != 3) {
-		printf("usage: tcp-fastopen URL PORT\n");
+		printf("usage: tcp-fastopen IP PORT\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -126,21 +129,34 @@ main(int argc, char *argv[])
 	}
 #endif
 
-	if ((fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+	memset(&addr, 0, sizeof(struct sockaddr_storage));
+	addr4 = (struct sockaddr_in*) &addr;
+	addr6 = (struct sockaddr_in6*) &addr;
+
+	if (inet_pton(AF_INET, argv[1], &(addr4->sin_addr.s_addr)) == 1) {
+		socket_family = AF_INET;
+		addr4->sin_family = AF_INET;
+		addr4->sin_port = htons(atoi(argv[2]));
+#if defined(__APPLE__) || defined(__FreeBSD__)
+		addr4->sin_len = sizeof(struct sockaddr_in);
+#endif
+	} else if (inet_pton(AF_INET6, argv[1], &(addr6->sin6_addr.s6_addr)) == 1) {
+		socket_family = AF_INET6;
+		addr6->sin6_family = AF_INET6;
+		addr6->sin6_port = htons(atoi(argv[2]));
+#if defined(__APPLE__) || defined(__FreeBSD__)
+		addr6->sin6_len = sizeof(struct sockaddr_in6);
+#endif
+	} else {
+		printf("inet_pton failed - please enter valid IPv4/IPv6 address!\n");
+		return(EXIT_FAILURE);
+	}
+
+	if ((fd = socket(socket_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
 
-	memset(&addr, 0, sizeof(struct sockaddr_in));
-	addr.sin_family = AF_INET;
-#if defined(__APPLE__) || defined(__FreeBSD__)
-	addr.sin_len = sizeof(struct sockaddr_in);
-#endif
-	addr.sin_port = htons(atoi(argv[2]));
-	if (inet_pton(AF_INET, argv[1], &addr.sin_addr.s_addr) != 1) {
-		printf("inet_pton failed - please enter valid IPv4 address!\n");
-		return(EXIT_FAILURE);
-	}
 #if defined(__APPLE__)
 	endpoints.sae_srcif = 0;
 	endpoints.sae_srcaddr = NULL;
@@ -181,7 +197,7 @@ main(int argc, char *argv[])
 		printf("bind failed: %d\n", WSAGetLastError());
 		return(EXIT_FAILURE);
 	}
-	
+
 	memset(&ol, 0, sizeof(ol));
 	ok = ConnectEx(fd, (SOCKADDR*)&addr, sizeof(addr), req, strlen(req), &bytesSent, &ol);
 
