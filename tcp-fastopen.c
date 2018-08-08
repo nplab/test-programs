@@ -91,6 +91,7 @@ main(int argc, char *argv[])
 	struct sockaddr_in *addr4;
 	struct sockaddr_in6 *addr6;
 	int socket_family;
+	size_t addr_len;
 
 	ssize_t n;
 #if defined(__APPLE__)
@@ -135,12 +136,15 @@ main(int argc, char *argv[])
 
 	if (inet_pton(AF_INET, argv[1], &(addr4->sin_addr.s_addr)) == 1) {
 		socket_family = AF_INET;
+		addr_len = sizeof(struct sockaddr_in);
+
 		addr4->sin_family = AF_INET;
 		addr4->sin_port = htons(atoi(argv[2]));
 #if defined(__APPLE__) || defined(__FreeBSD__)
 		addr4->sin_len = sizeof(struct sockaddr_in);
 #endif
 	} else if (inet_pton(AF_INET6, argv[1], &(addr6->sin6_addr.s6_addr)) == 1) {
+		addr_len = sizeof(struct sockaddr_in6);
 		socket_family = AF_INET6;
 		addr6->sin6_family = AF_INET6;
 		addr6->sin6_port = htons(atoi(argv[2]));
@@ -173,11 +177,11 @@ main(int argc, char *argv[])
 	if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&on, (socklen_t)sizeof(int)) < 0) {
 		perror("setsockopt");
 	}
-	if (sendto(fd, req, strlen(req), 0, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0) {
+	if (sendto(fd, req, strlen(req), 0, (const struct sockaddr *)&addr, addr_len) < 0) {
 		perror("sendto");
 	}
 #elif defined(__linux__)
-	if (sendto(fd, req, strlen(req), MSG_FASTOPEN, (const struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0) {
+	if (sendto(fd, req, strlen(req), MSG_FASTOPEN, (const struct sockaddr *)&addr, addr_len) < 0) {
 		perror("sendto");
 	}
 #elif defined(_WIN32)
