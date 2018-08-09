@@ -107,7 +107,10 @@ main(int argc, char *argv[])
 	OVERLAPPED ol;
 	DWORD bytesSent;
 	BOOL ok;
-	struct sockaddr_in6 bind_addr;
+	struct sockaddr_storage bind_addr;
+	struct sockaddr_in *bind_addr4;
+	struct sockaddr_in6 *bind_addr6;
+
 #else // defined(_WIN32)
 	int fd;
 #endif // defined(_WIN32)
@@ -187,20 +190,28 @@ main(int argc, char *argv[])
 		printf("setsockopt failed: %d\n", WSAGetLastError());
 		exit(EXIT_FAILURE);
 	}
-
+	
 	memset(&bind_addr, 0, sizeof(bind_addr));
-	bind_addr.sin6_family = AF_INET6;
-	bind_addr.sin6_addr = in6addr_any;
-	bind_addr.sin6_port = 0;
-	//inet_pton(AF_INET, "10.0.1.158", &addr.sin_addr.s_addr);
-	//addr.sin_port = htons(1988);
+	bind_addr4 = (struct sockaddr_in*) &bind_addr;
+	bind_addr6 = (struct sockaddr_in6*) &bind_addr;
+
+	if (addr.ss_family == AF_INET) {
+		bind_addr4->sin_family = AF_INET;
+		bind_addr4->sin_addr.s_addr = INADDR_ANY;
+		bind_addr4->sin_port = 0;
+	} else {
+		bind_addr6->sin6_family = AF_INET6;
+		bind_addr6->sin6_addr = in6addr_any;
+		bind_addr6->sin6_port = 0;
+	}
+	
 	if (bind(fd, (SOCKADDR*)&bind_addr, sizeof(bind_addr)) != 0) {
 		printf("bind failed: %d\n", WSAGetLastError());
 		return(EXIT_FAILURE);
 	}
 
 	memset(&ol, 0, sizeof(ol));
-	ok = ConnectEx(fd, (SOCKADDR*)&addr, sizeof(addr), req, strlen(req), &bytesSent, &ol);
+	ok = ConnectEx(fd, (SOCKADDR*)&addr, addr_len, req, strlen(req), &bytesSent, &ol);
 
 	if (ok) {
 		printf("ConnectEx ok - 1\n");
