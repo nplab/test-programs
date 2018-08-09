@@ -90,7 +90,6 @@ main(int argc, char *argv[])
 	struct sockaddr_storage addr;
 	struct sockaddr_in *addr4;
 	struct sockaddr_in6 *addr6;
-	int socket_family;
 	size_t addr_len;
 
 	ssize_t n;
@@ -108,7 +107,7 @@ main(int argc, char *argv[])
 	OVERLAPPED ol;
 	DWORD bytesSent;
 	BOOL ok;
-	struct sockaddr_storage bind_addr;
+	struct sockaddr_in6 bind_addr;
 #else // defined(_WIN32)
 	int fd;
 #endif // defined(_WIN32)
@@ -135,7 +134,6 @@ main(int argc, char *argv[])
 	addr6 = (struct sockaddr_in6*) &addr;
 
 	if (inet_pton(AF_INET, argv[1], &(addr4->sin_addr.s_addr)) == 1) {
-		socket_family = AF_INET;
 		addr_len = sizeof(struct sockaddr_in);
 
 		addr4->sin_family = AF_INET;
@@ -145,7 +143,6 @@ main(int argc, char *argv[])
 #endif
 	} else if (inet_pton(AF_INET6, argv[1], &(addr6->sin6_addr.s6_addr)) == 1) {
 		addr_len = sizeof(struct sockaddr_in6);
-		socket_family = AF_INET6;
 		addr6->sin6_family = AF_INET6;
 		addr6->sin6_port = htons(atoi(argv[2]));
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -156,7 +153,7 @@ main(int argc, char *argv[])
 		return(EXIT_FAILURE);
 	}
 
-	if ((fd = socket(socket_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+	if ((fd = socket(addr.ss_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
@@ -192,9 +189,9 @@ main(int argc, char *argv[])
 	}
 
 	memset(&bind_addr, 0, sizeof(bind_addr));
-	bind_addr.sin_family = AF_INET;
-	bind_addr.sin_addr.s_addr = INADDR_ANY;
-	bind_addr.sin_port = 0;
+	bind_addr.sin6_family = AF_INET6;
+	bind_addr.sin6_addr.s6_addr = in6addr_any;
+	bind_addr.sin6_port = 0;
 	//inet_pton(AF_INET, "10.0.1.158", &addr.sin_addr.s_addr);
 	//addr.sin_port = htons(1988);
 	if (bind(fd, (SOCKADDR*)&bind_addr, sizeof(bind_addr)) != 0) {
