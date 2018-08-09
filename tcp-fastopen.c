@@ -190,7 +190,7 @@ main(int argc, char *argv[])
 
 	memset(&bind_addr, 0, sizeof(bind_addr));
 	bind_addr.sin6_family = AF_INET6;
-	bind_addr.sin6_addr.s6_addr = in6addr_any;
+	bind_addr.sin6_addr = in6addr_any;
 	bind_addr.sin6_port = 0;
 	//inet_pton(AF_INET, "10.0.1.158", &addr.sin_addr.s_addr);
 	//addr.sin_port = htons(1988);
