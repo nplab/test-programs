@@ -17,7 +17,7 @@ message(STATUS "Default compiler options: ${CMAKE_C_FLAGS}")
 
 # SETTINGS FOR UNIX COMPILER
 if (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "AppleClang" OR CMAKE_C_COMPILER_ID MATCHES "GNU")
-	set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -std=c99 -pedantic -Wall -Wextra -Werror")
+	set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -std=c99 -pedantic -Wall -Wextra -Werror")
 
 	check_c_compiler_flag(-Wfloat-equal has_wfloat_equal)
 	if (has_wfloat_equal)
@@ -82,6 +82,7 @@ message(STATUS "Using compiler options: ${CMAKE_C_FLAGS}")
 
 set(check_programs
 	tcp-fastopen.c
+	tcp-slowopen.c
 )
 
 foreach (source_file ${check_programs})
