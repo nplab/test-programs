@@ -29,7 +29,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <netinet/tcp.h>
 #endif
 
@@ -52,14 +52,22 @@ main(int argc, char *argv[])
 	size_t addr_len;
 
 	ssize_t n;
+#if defined(__FreeBSD__)
+	int port;
+#endif
 #if defined(__APPLE__)
 	const int on = 1;
 	//const int off = 0;
 #endif
 	int fd;
 
+#if defined(__FreeBSD__)
+	if (argc < 3 || argc > 4) {
+		printf("usage: tcp-fastopen IP PORT [ENCAPS_PORT]\n");
+#else
 	if (argc != 3) {
 		printf("usage: tcp-fastopen IP PORT\n");
+#endif
 		exit(EXIT_FAILURE);
 	}
 
@@ -93,6 +101,14 @@ main(int argc, char *argv[])
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
+#if defined(__FreeBSD__)
+	if (argc == 4) {
+		port = atoi(argv[3]);
+		if (setsockopt(fd, IPPROTO_TCP, TCP_REMOTE_UDP_ENCAPS_PORT, (const void *)&port, (socklen_t)sizeof(int)) < 0) {
+			perror("setsockopt");
+		}
+	}
+#endif
 #if defined(__APPLE__)
 	if (setsockopt(fd, IPPROTO_TCP, TCP_ENABLE_ECN, (const void *)&on, (socklen_t)sizeof(int)) < 0) {
 		perror("setsockopt");

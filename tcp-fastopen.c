@@ -101,6 +101,7 @@ main(int argc, char *argv[])
 #endif
 #if defined(__FreeBSD__)
 	const int on = 1;
+	int port;
 #endif
 #if defined(_WIN32)
 	SOCKET fd;
@@ -113,8 +114,13 @@ main(int argc, char *argv[])
 	int fd;
 #endif // defined(_WIN32)
 
+#if defined(__FreeBSD__)
+	if (argc < 3 || argc > 4) {
+		printf("usage: tcp-fastopen IP PORT [ENCAPS_PORT]\n");
+#else
 	if (argc != 3) {
 		printf("usage: tcp-fastopen IP PORT\n");
+#endif
 		exit(EXIT_FAILURE);
 	}
 
@@ -160,6 +166,15 @@ main(int argc, char *argv[])
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
+
+#if defined(__FreeBSD__)
+	if (argc == 4) {
+		port = atoi(argv[3]);
+		if (setsockopt(fd, IPPROTO_TCP, TCP_REMOTE_UDP_ENCAPS_PORT, (const void *)&port, (socklen_t)sizeof(int)) < 0) {
+			perror("setsockopt");
+		}
+	}
+#endif
 
 #if defined(__APPLE__)
 	endpoints.sae_srcif = 0;
